@@ -18,13 +18,17 @@ camera.resolution = (320, 240)
 output = np.empty((240, 320, 3), dtype=np.uint8)
 
 # Load a sample picture and learn how to recognize it.
-print("Loading known face image(s)")
-obama_image = face_recognition.load_image_file("obama_small.jpg")
-obama_face_encoding = face_recognition.face_encodings(obama_image)[0]
+fnames = 'hongk.jpg,liming.jpeg,woman.jpeg,me.png,yyy.png'.split(',')
+print("Loading known face image(s): %s" %fnames)
 
-# Initialize some variables
-face_locations = []
-face_encodings = []
+biden = []
+dic = {}
+for i, fname in enumerate(fnames):
+    img = face_recognition.load_image_file(fname)
+    biden.append(face_recognition.face_encodings(img)[0])
+    dic[i] = fname
+print(dic)
+
 
 while True:
     print("Capturing image.")
@@ -39,10 +43,12 @@ while True:
     # Loop over each face found in the frame to see if it's someone we know.
     for face_encoding in face_encodings:
         # See if the face is a match for the known face(s)
-        match = face_recognition.compare_faces([obama_face_encoding], face_encoding)
+        match = face_recognition.compare_faces(biden, face_encoding)
+        print(match)
         name = "<Unknown Person>"
-
-        if match[0]:
-            name = "Barack Obama"
-
+        for i, v in enumerate(match):
+            if v:
+                name = dic[i]
+                break
         print("I see someone named {}!".format(name))
+        break
