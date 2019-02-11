@@ -7,6 +7,9 @@
 
 import face_recognition
 import numpy as np
+import sys
+if sys.version_info[0] >= 3:
+    raw_input = input
 
 
 def prepare_camera():
@@ -15,8 +18,7 @@ def prepare_camera():
     # enabled your camera in raspi-config and rebooted first.
     camera = picamera.PiCamera()
     camera.resolution = (320, 240)
-    output = np.empty((240, 320, 3), dtype=np.uint8)
-    return camera, output
+    return camera
 
 
 def known_faces(path, names):
@@ -27,7 +29,7 @@ def known_faces(path, names):
     for i, fname in enumerate(names):
         # single face image
         print('\tload %d: %s' % (i, fname))
-        img = face_recognition.load_image_file('%s/%s' %(path, fname))
+        img = face_recognition.load_image_file('%s/%s' % (path, fname))
         res = face_recognition.face_encodings(img)
         if len(res) < 1:
             continue
@@ -39,8 +41,7 @@ def known_faces(path, names):
 def load_cache(roster):
     import os
     import pickle
-    import sys
-    res = None
+    res = [], []
     fpkl = roster + '.pkl'
     found = os.path.isfile(fpkl)
     if not found:
@@ -73,34 +74,48 @@ def download_img(url, roster):
             for i in sps:
                 url = i.a['href']
                 fname = url.rsplit('/', 1)[1]
-                if not fname[0].isalpha() or not fname.rsplit('.', 1)[0].isalnum():
+                if not fname[0].isalpha() or not fname.rsplit('.',
+                                                              1)[0].isalnum():
                     continue
                 print('download {}'.format(fname))
                 urllib.urlretrieve(url, '%s/%s' % (roster, fname))
                 f1.write('%s\n' % fname)
 
 
-def main(camera, output, bid_encodings, bid_names):
+def most_like(lst, target):
+    min_v, argmin = 1e10, -1
+    for i, a in enumerate(lst):
+        v = np.linalg.norm(a - target)
+        if v < 0.6 and v < min_v:
+            min_v, argmin = v, i
+    if argmin >= 0:
+        print('most_like: %s, v: %s' % (argmin, min_v))
+    return argmin
+
+
+def main(camera, bid_encodings, bid_names):
     print(bid_names)
+    output = np.empty((240, 320, 3), dtype=np.uint8)
     while True:
         print("Capturing image.")
-        # Grab a single frame of video from the RPi camera as a numpy array
         camera.capture(output, format="rgb")
         # Find all the faces and face encodings in the current frame of video
         face_locations = face_recognition.face_locations(output)
         print("Found {} faces in image.".format(len(face_locations)))
-        face_encodings = face_recognition.face_encodings(
-            output, face_locations)
+        face_encodings = face_recognition.face_encodings(output, face_locations)
         # Loop over each face found in the frame to see if it's someone we know.
         for k, face_encoding in enumerate(face_encodings):
             # See if the face is a match for the known face(s)
-            res = face_recognition.face_distance(bid_encodings, face_encoding)
-            most_like = np.argmin(res)
-            if res[most_like] < 0.6:
-                name = bid_names[most_like]
-                print('most_like: %s, v: %s, name: %s' %(most_like, res[most_like], name))
+            name = 'unkown'
+            most = most_like(bid_encodings, face_encoding)
+            if most >= 0:
+                name = bid_names[most]
             else:
-                name = 'unkown'
+                answer = raw_input('store new person? [y]|n\n')
+                if answer != 'n':
+                    name = raw_input('name?\n')
+                    bid_encodings.append(face_encoding)
+                    bid_names.append(name)
             print("I see face {} named {}!".format(k, name))
 
 
@@ -110,6 +125,4 @@ if __name__ == "__main__":
     roster = 'ewku.com'
     # ?q=%E6%98%8E%E6%98%9F+%E5%A4%B4%E5%83%8F+%E5%BA%93+ewku.com&qs=n&form=QBIRMH&qft=+filterui%3Aface-face+filterui%3Aimagesize-small&sp=-1&pq=%E6%98%8E%E6%98%9F+%E5%A4%B4%E5%83%8F+%E5%BA%93+ewku.com&sc=0-16&sk=&cvid=7842EFF9FA3445579A8FFAE7B25D6131'
     # download_img(url, roster)
-    bids = load_cache(roster)
-    cam, output = prepare_camera()
-    main(cam, output, *bids)
+    main(prepare_camera(), *load_cache(roster))
